@@ -7,6 +7,11 @@ const $ = (id) => document.getElementById(id);
 let books = [];
 let filter = 'all';
 let pendingDelete = null;
+let editing = null;
+let loaded = false;
+let loading = false;
+let busy = false;
+let stale = false;
 
 const THEME_KEY = 'my-reading-diary:p01:theme';
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -60,7 +65,7 @@ function localDate() {
 function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  return value >= '1000-01-01' && Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 function newId() {
@@ -71,7 +76,7 @@ function newId() {
 function validBook(book) {
   return book && typeof book === 'object' &&
     validDate(book.date) &&
-    typeof book.id === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(book.id) &&
+    typeof book.id === 'string' && /^[a-fA-F0-9]{32}$/.test(book.id) &&
     typeof book.title === 'string' && book.title.trim().length > 0 && book.title.length <= 200 &&
     typeof book.author === 'string' && book.author.length <= 160 &&
     typeof book.notes === 'string' && book.notes.length <= 5000 &&
@@ -81,66 +86,86 @@ function validBook(book) {
     (book.status !== 'done' || book.current === book.pages);
 }
 
-function starterBooks() {
-  const examples = [
-    ['เจ้าชายน้อย (The Little Prince)', 'Antoine de Saint-Exupéry', 120, 'การเดินทางของเจ้าชายน้อย ชวนคิดเรื่องมิตรภาพ ความรัก และคุณค่าของสิ่งสำคัญ'],
-    ['โต๊ะโตะจัง เด็กหญิงข้างหน้าต่าง', 'Tetsuko Kuroyanagi', 240, 'เรื่องราววัยเด็กในโรงเรียนที่เข้าใจความแตกต่างและเปิดโอกาสให้เด็กเป็นตัวเอง'],
-    ['The Secret Garden (สวนปริศนา)', 'Frances Hodgson Burnett', 320, 'เด็กหญิงและเพื่อนร่วมฟื้นฟูสวนที่ถูกปิดตาย พร้อมเรียนรู้พลังของธรรมชาติและมิตรภาพ'],
-    ['Around the World in Eighty Days (รอบโลกในแปดสิบวัน)', 'Jules Verne', 300, 'การผจญภัยรอบโลกภายใต้เวลาจำกัด เต็มไปด้วยการแก้ปัญหาและการพบวัฒนธรรมใหม่']
-  ];
-  return examples.map(([title, author, pages, summary], index) => ({
-    id: `starter-${index + 1}`,
-    title, author, pages,
-    current: 0,
-    status: 'want',
-    date: localDate(),
-    notes: `รายการตัวอย่างสำหรับหนังสือที่อยากอ่าน: ${summary} ยังไม่ได้เริ่มอ่าน จำนวน ${pages} หน้าเป็นค่าตัวอย่าง โปรดปรับตามฉบับจริง วันที่เป็นวันที่เพิ่มตัวอย่าง ไม่ใช่ประวัติการอ่านจริง`
-  }));
-}
-
 try {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  // Seed only a new browser; an intentionally emptied diary must stay empty.
-  if (raw === null) {
-    books = starterBooks();
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
-    } catch {
-      notify('แสดงหนังสือตัวอย่างชั่วคราว แต่ยังบันทึกไม่ได้ กรุณาตรวจสิทธิ์หรือพื้นที่จัดเก็บของเบราว์เซอร์');
-    }
-  } else {
-    if (raw.length > 4000000) throw new Error('Storage limit');
-    const saved = JSON.parse(raw);
-    if (!Array.isArray(saved) || saved.length > MAX_BOOKS) throw new Error('Invalid storage');
-    // Older records have no date; preserve them without inventing a reading date.
-    const migrated = saved.map((book) => book && typeof book === 'object' && !Object.hasOwn(book, 'date') ? { ...book, date: null } : book);
-    if (!migrated.every((book) => book && (book.date === null ? validBook({ ...book, date: '2000-01-01' }) : validBook(book))) ||
-        new Set(migrated.map((book) => book.id)).size !== migrated.length) throw new Error('Invalid storage');
-    books = migrated;
+  if (localStorage.getItem(STORAGE_KEY) !== null) {
+    $('legacy-notice').textContent = 'พบข้อมูลเดิมในเบราว์เซอร์ ยังไม่ได้นำเข้าฐานข้อมูลและยังคงเดิมโดยไม่ถูกแก้ไข รายการด้านล่างมาจากฐานข้อมูลส่วนกลางเท่านั้น';
+    $('legacy-notice').hidden = false;
   }
 } catch {
-  notify('ไม่สามารถอ่านข้อมูลเดิมได้ ข้อมูลเดิมยังไม่ถูกลบ กรุณาสำรองข้อมูลก่อนบันทึกรายการใหม่');
-  // Do not overwrite unreadable data when the next form is submitted.
-  $('book-form').dataset.storageBlocked = 'true';
+  $('legacy-notice').textContent = 'ตรวจข้อมูลเดิมในเบราว์เซอร์ไม่ได้ ไม่มีการนำเข้าหรือแก้ไขข้อมูลเดิม รายการด้านล่างมาจากฐานข้อมูลส่วนกลางเท่านั้น';
+  $('legacy-notice').hidden = false;
 }
 
-function persist(next) {
-  if ($('book-form').dataset.storageBlocked) {
-    notify('ยังบันทึกไม่ได้ เนื่องจากข้อมูลเดิมอ่านไม่ได้ กรุณาสำรองข้อมูลและแก้ไขพื้นที่จัดเก็บก่อน');
-    return false;
+function validSavedBook(book) {
+  return validBook(book) && Number.isInteger(book.version) && book.version >= 1 && book.version <= 4294967295;
+}
+
+async function request(url, method = 'GET', body) {
+  const response = await fetch(url, {
+    method, cache: 'no-store', signal: AbortSignal.timeout(15000),
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  });
+  if (!response.ok) {
+    const error = new Error('API request failed');
+    error.status = response.status;
+    throw error;
   }
+  return response.json();
+}
+
+function updateControls() {
+  const blocked = !loaded || loading || busy || stale;
+  document.querySelectorAll('#add-top, #add-empty, .discovery-button, .card-actions button').forEach((button) => {
+    button.disabled = blocked;
+  });
+  $('refresh-books').disabled = loading || busy;
+  $('refresh-books').textContent = loading ? 'กำลังโหลด…' : (loaded ? 'รีเฟรชข้อมูล' : 'ลองโหลดอีกครั้ง');
+  document.querySelectorAll('#book-form input, #book-form select, #book-form textarea, #book-form button, #delete-form button').forEach((control) => {
+    control.disabled = busy;
+  });
+  $('book-form').setAttribute('aria-busy', String(busy));
+  $('delete-form').setAttribute('aria-busy', String(busy));
+  $('books').setAttribute('aria-busy', String(loading));
+  $('save-book').textContent = busy ? 'กำลังดำเนินการ…' : 'บันทึกการอ่าน';
+  $('confirm-delete').textContent = busy ? 'กำลังดำเนินการ…' : 'ยืนยันลบ';
+}
+
+async function loadBooks() {
+  if (loading || busy) return;
+  loading = true;
+  $('load-status').textContent = 'กำลังโหลดบันทึกจากฐานข้อมูลส่วนกลาง…';
+  render();
   try {
-    const serialized = JSON.stringify(next);
-    if (serialized.length > 4000000) throw new Error('Storage limit');
-    localStorage.setItem(STORAGE_KEY, serialized);
-    books = next;
+    const data = await request('/api/books');
+    if (!Array.isArray(data.books) || data.books.length > MAX_BOOKS || !data.books.every(validSavedBook) ||
+        new Set(data.books.map((book) => book.id)).size !== data.books.length) throw new Error('Invalid books response');
+    books = data.books;
+    loaded = true;
+    stale = false;
     notify('');
+    $('load-status').textContent = 'โหลดข้อมูลส่วนกลางแล้ว ทุกคนใช้รายการเดียวกัน กดรีเฟรชเพื่อดูการเปลี่ยนแปลงล่าสุด';
+  } catch (error) {
+    stale = true;
+    $('load-status').textContent = error.status === 503
+      ? 'ฐานข้อมูลยังไม่พร้อมใช้งาน กรุณากดลองโหลดอีกครั้ง'
+      : 'โหลดข้อมูลไม่สำเร็จ กรุณาตรวจการเชื่อมต่อแล้วลองอีกครั้ง';
+    if (loaded) notify('รายการที่แสดงเป็นข้อมูลครั้งก่อน ปิดการแก้ไขจนกว่าจะรีเฟรชสำเร็จ');
+  } finally {
+    loading = false;
     render();
-    return true;
-  } catch {
-    notify('บันทึกไม่สำเร็จ พื้นที่อาจเต็มหรือเบราว์เซอร์ไม่อนุญาต ข้อมูลที่บันทึกไว้ก่อนหน้านี้ยังอยู่');
-    return false;
   }
+}
+
+function mutationError(error) {
+  // A lost response may follow a committed write. Require a read before any retry.
+  stale = true;
+  if (error.status === 409 || error.status === 404) {
+    return 'ข้อมูลอาจถูกแก้ไขหรือลบแล้ว หรือถึงขีดจำกัดรายการ กรุณาปิดหน้าต่างแล้วกดรีเฟรชข้อมูลก่อนลองใหม่';
+  }
+  if (error.status === 503) {
+    return 'ฐานข้อมูลยังไม่พร้อมใช้งาน ยังยืนยันผลไม่ได้ กรุณาปิดหน้าต่างแล้วกดรีเฟรชข้อมูลก่อนลองใหม่';
+  }
+  return 'ยังยืนยันผลไม่ได้ กรุณาปิดหน้าต่างแล้วกดรีเฟรชข้อมูลเพื่อตรวจผลก่อนลองใหม่';
 }
 
 function element(tag, className, text) {
@@ -246,9 +271,10 @@ function card(book) {
   remove.type = 'button';
   remove.setAttribute('aria-label', `ลบ ${book.title}`);
   remove.addEventListener('click', () => {
-    pendingDelete = book.id;
+    if (!loaded || loading || busy || stale) return;
+    pendingDelete = { id: book.id, version: book.version };
     $('delete-copy').textContent = book.title;
-    $('delete-dialog').returnValue = 'cancel';
+    $('delete-error').textContent = '';
     $('delete-dialog').showModal();
   });
   actions.append(edit, remove);
@@ -267,12 +293,18 @@ function render() {
     [book.title, book.author, book.notes].some((text) => text.toLocaleLowerCase('th-TH').includes(search)));
   $('books').replaceChildren(...visible.map(card));
   $('result-count').textContent = `${visible.length} เล่ม`;
-  $('empty').hidden = visible.length !== 0;
+  $('empty').hidden = !loaded || loading || stale || visible.length !== 0;
   $('empty-copy').textContent = books.length ? 'ไม่พบหนังสือตามเงื่อนไข ลองเปลี่ยนคำค้นหาหรือสถานะ' : 'เพิ่มหนังสือที่กำลังอ่าน แล้วเก็บความประทับใจไปด้วยกัน';
   $('add-empty').hidden = books.length !== 0;
+  if (!loaded) {
+    for (const id of ['stat-total', 'stat-reading', 'stat-done', 'stat-pages', 'result-count']) $(id).textContent = '—';
+  }
+  updateControls();
 }
 
 function openForm(book) {
+  if (!loaded || loading || busy || stale) return;
+  editing = book && book.id ? { id: book.id, version: book.version } : null;
   $('book-form').reset();
   $('book-id').value = book ? book.id : '';
   $('dialog-title').textContent = book && book.id ? 'แก้ไขบันทึกการอ่าน' : 'เพิ่มบันทึกการอ่าน';
@@ -302,9 +334,13 @@ document.querySelectorAll('[data-filter]').forEach((button) => {
 $('status').addEventListener('change', () => {
   if ($('status').value === 'done' && $('pages').value) $('current').value = $('pages').value;
 });
-$('book-form').addEventListener('submit', (event) => {
+$('book-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const id = $('book-id').value;
+  if (!loaded || loading || busy || stale) {
+    $('form-error').textContent = 'กรุณาปิดหน้าต่างแล้วรีเฟรชข้อมูลก่อนบันทึก';
+    return;
+  }
+  const id = editing ? editing.id : '';
   if (!id && books.length >= MAX_BOOKS) {
     $('form-error').textContent = `เก็บหนังสือได้สูงสุด ${MAX_BOOKS} เล่ม`;
     return;
@@ -320,28 +356,64 @@ $('book-form').addEventListener('submit', (event) => {
     notes: $('notes').value.trim()
   };
   if (book.status === 'done') book.current = book.pages;
-  if (!validBook(book) || !book.author || !book.notes || book.date < '0001-01-01') {
+  if (!validBook(book) || !book.author || !book.notes) {
     $('form-error').textContent = 'กรุณากรอกชื่อหนังสือ ผู้เขียน วันที่ และสรุปเนื้อหาให้ครบ จำนวนหน้าที่อ่านต้องไม่เกินจำนวนหน้าทั้งหมด';
     return;
   }
-  const next = id ? books.map((item) => item.id === id ? book : item) : [book, ...books];
-  if (persist(next)) $('book-dialog').close();
-  else $('form-error').textContent = 'บันทึกไม่สำเร็จ กรุณาปิดหน้าต่างเพื่ออ่านข้อความแจ้งเตือน';
-});
-$('delete-dialog').addEventListener('close', () => {
-  if ($('delete-dialog').returnValue === 'delete' && pendingDelete) {
-    persist(books.filter((book) => book.id !== pendingDelete));
+  const payload = { ...book };
+  if (id) {
+    delete payload.id;
+    payload.version = editing.version;
   }
-  pendingDelete = null;
+  busy = true;
+  updateControls();
+  try {
+    const data = await request(id ? `/api/books/${id}` : '/api/books', id ? 'PUT' : 'POST', payload);
+    if (!validSavedBook(data.book) || data.book.id !== book.id ||
+        data.book.version !== (id ? editing.version + 1 : 1)) throw new Error('Invalid saved book');
+    books = id ? books.map((item) => item.id === id ? data.book : item) : [...books, data.book];
+    $('book-dialog').close();
+    notify('บันทึกลงฐานข้อมูลแล้ว');
+  } catch (error) {
+    $('form-error').textContent = mutationError(error);
+  } finally {
+    busy = false;
+    render();
+  }
 });
+$('delete-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (busy) return;
+  if (event.submitter && event.submitter.value === 'cancel') {
+    $('delete-dialog').close();
+    return;
+  }
+  if (!pendingDelete || stale || loading || !loaded) {
+    $('delete-error').textContent = 'กรุณาปิดหน้าต่างแล้วรีเฟรชข้อมูลก่อนลบ';
+    return;
+  }
+  busy = true;
+  updateControls();
+  try {
+    const data = await request(`/api/books/${pendingDelete.id}`, 'DELETE', { version: pendingDelete.version });
+    if (data.id !== pendingDelete.id) throw new Error('Invalid delete response');
+    books = books.filter((book) => book.id !== pendingDelete.id);
+    $('delete-dialog').close();
+    notify('ลบรายการจากฐานข้อมูลแล้ว');
+  } catch (error) {
+    $('delete-error').textContent = mutationError(error);
+  } finally {
+    busy = false;
+    render();
+  }
+});
+$('delete-dialog').addEventListener('close', () => { pendingDelete = null; });
+for (const id of ['book-dialog', 'delete-dialog']) {
+  $(id).addEventListener('cancel', (event) => { if (busy) event.preventDefault(); });
+}
+$('refresh-books').addEventListener('click', loadBooks);
 renderRecommendations();
-window.addEventListener('storage', (event) => {
-  if (event.storageArea === localStorage && (event.key === STORAGE_KEY || event.key === null)) {
-    notify('ข้อมูลถูกเปลี่ยนจากแท็บอื่น กรุณารีโหลดหน้านี้ก่อนแก้ไขต่อเพื่อป้องกันการเขียนทับ');
-    $('book-form').dataset.storageBlocked = 'true';
-  }
-});
-render();
+loadBooks();
 
 async function loadShareCode() {
   try {

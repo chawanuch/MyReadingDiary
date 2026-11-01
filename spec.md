@@ -5,7 +5,8 @@
 - Confirmed project: p01, room r0001, membership r0001_u13.
 - Application port: 31131. Local development host: 127.0.0.1.
 - Runtime: Node.js >=22 supporting process.loadEnvFile, CommonJS, server.js.
-- Storage: browser Local Storage only. No database connection or credentials required.
+- Storage: shared MariaDB database db_std13_p01, owner std13, port 3306. Connection secrets stay server-side in process.env.
+- No per-user authentication: anyone with access to this application can view/change the shared collection.
 - Parent project is unrelated and must not be modified.
 
 ## Requirements
@@ -15,7 +16,7 @@
 3. Delete records after confirmation; cancellation preserves data.
 4. Show the total number of completed books, independent of search and filters.
 5. Search book titles; author and summary search are also supported.
-6. Keep data after reload through Local Storage.
+6. Keep data after reload and across devices through MariaDB; theme preference alone uses Local Storage.
 7. Use a colorful blue-and-white, student-friendly interface with mint, peach, and yellow accents.
 8. Support desktop and mobile, keyboard navigation, visible focus, and reduced motion.
 9. Provide a day/night toggle in the header, with an accessible pressed state and browser-local preference persistence. Follow system color scheme until a user preference is selected; synchronize theme changes across tabs without blocking reading-record edits. Theme switching still works if storage is unavailable, but cannot persist in that case.
@@ -41,23 +42,20 @@ Fields:
 
 Selecting done sets current to pages. Completed-book count uses status=done; reading all pages without selecting done does not mark completion automatically. Total pages is the sum of cumulative pages across records, not a daily-session total.
 
-Older records without a date remain visible with an unspecified-date label; editing requires choosing a date. Existing optional author/summary values remain readable.
+Dates must be valid calendar dates between 1000-01-01 and 9999-12-31. Database records include an integer version for optimistic concurrency. Editing and deletion send the version captured when the dialog opened; stale versions return 409.
 
-## Starter Books
+## Existing Browser Data
 
-A browser with no diary storage key receives four editable sample books: The Little Prince, Totto-chan, The Secret Garden, and Around the World in Eighty Days. Samples use stable starter-1 through starter-4 IDs, want status, zero pages read, and explicitly illustrative page counts. The date is the sample creation date, not a claimed reading date. The samples are included in public/index.js, so a new browser displays them without manual entry.
-
-Existing diaries are never overwritten or merged with samples. An intentionally empty saved array remains empty after reload; deleted samples do not return. If the initial storage write fails, samples are shown temporarily with a warning. This is first-use example data, not database synchronization.
+No sample records are seeded. The previous key my-reading-diary:p01:v1 is checked only to show a legacy-data notice; it is never overwritten, deleted, or imported automatically. The visible collection comes exclusively from GET /api/books. Recommendations remain static suggestions, not saved records until explicitly submitted.
 
 ## Storage and Safety
 
-- Key: my-reading-diary:p01:v1; maximum 500 records and 4,000,000 serialized characters.
-- Data belongs to this browser profile and origin (scheme, host, port). It is not shared between devices or accounts.
-- Browser data clearing, private browsing expiration, origin changes, or device loss can remove access. No export, backup, authentication, or cloud sync is provided.
-- Invalid/corrupt stored data blocks writes without deleting the original value.
-- Failed writes do not replace the displayed in-memory records. Cross-tab changes block further writes until reload; simultaneous writes are not transactional.
-- User content is rendered with textContent, never injected as HTML.
-- Local Storage is not suitable for secrets or sensitive personal information.
+- Table reading_books uses InnoDB, utf8mb4, a 32-hex primary key, validation constraints, version, and created/updated timestamps. Schema is supplied separately in migrations.sql, excluded from Git.
+- Maximum 500 shared records; creation uses a database advisory lock and transaction. Update/delete use row locks and version checks. SQL is parameterized.
+- Loading, failure, stale cached display, and genuinely empty results are distinct states. Mutations are disabled until a successful read.
+- Failed or ambiguous writes preserve form input and require a refresh before retry; no automatic write retries. UI changes only after confirmed responses.
+- User content is rendered with textContent. Browser cross-origin writes are rejected; these checks are not authentication.
+- No automatic migration, seed, browser import, backup, or per-user isolation is implemented. Avoid sensitive information.
 
 ## Source Structure
 
@@ -71,11 +69,11 @@ Existing diaries are never overwritten or merged with samples. An intentionally 
 - .gitignore
 - spec.md (non-executable documentation)
 
-The production dependency qrcode generates the optional sharing QR image. There are no application npm installation lifecycle scripts, build output, migrations, or database calls. Application source files must each remain below 1 MiB.
+Production dependencies are mysql2 (database driver) and qrcode (optional sharing QR). Install with lifecycle scripts disabled. Application source files must each remain below 1 MiB. No migration executes from npm or server startup.
 
 ## Running Locally
 
-The local .env contains nonsecret PORT=31131 and HOST=127.0.0.1. Read configuration through process.env; do not hard-code credentials. Start using npm.cmd start from this directory on Windows, then open http://127.0.0.1:31131. npm.cmd run check checks server and frontend syntax. Other supported environments can use npm start and npm run check.
+The local .env provides PORT=31131, HOST, NODE_ENV, DB_HOST, DB_PORT=3306, DB_NAME, DB_USER, and DB_PASSWORD. Use the actual learner-accessible host locally; never copy it over server-managed DB settings. Read configuration through process.env; do not hard-code credentials. Start using npm.cmd start from this directory on Windows, then open http://127.0.0.1:31131. npm.cmd run check checks server and frontend syntax. Other supported environments can use npm start and npm run check.
 
 For platform deployment, configure HOST through the managed environment if required by the platform routing contract; the local loopback setting is not a deployment-routing guarantee.
 
@@ -83,19 +81,47 @@ For platform deployment, configure HOST through the managed environment if requi
 
 - GET/HEAD / and /index.html: HTML.
 - GET/HEAD /style.css and /index.js: static assets.
-- GET/HEAD /api/health: JSON status=ok, storage=browser-local.
+- GET/HEAD /api/health: DB connection check, JSON status=ok, storage=mariadb; 503 on unavailable storage.
+- GET /api/books: {books}; POST /api/books: accepts all record fields including id, returns 201 {book}.
+- PUT /api/books/:id: accepts fields without id plus version; returns {book} with incremented version.
+- DELETE /api/books/:id: accepts {version}; returns {id}.
+- Invalid data returns 400, missing rows 404, stale versions/duplicates/record cap 409, and storage errors 503. JSON body limit is 64 KiB.
 - Other methods: 405; unlisted paths: 404; malformed URLs: 400 where rejected by URL parsing.
 - Explicit asset allowlist and realpath checks reject arbitrary files and symlink redirection.
 - CSP, frame denial, nosniff, no-referrer, disabled device permissions, and no-store headers apply.
-- Request/header/keep-alive timeouts and a connection limit are configured. No reading-data endpoints exist.
+- Request/header/keep-alive timeouts, a four-connection DB pool, queue limit, and server connection limit are configured.
 
 ## Acceptance Checks
 
-Create, edit, search, filter, reload, and delete a reading record; cancel deletion; check completed-book and cumulative-page totals. Validate required fields, date validity, numeric bounds, overflow pages, literal HTML input, empty/search-empty states, unavailable/corrupt/full storage, older records, and cross-tab write blocking. Check desktop and narrow-mobile layout and dialog usability.
+Create/read/update/delete uniquely tagged test records through browser/API and verify database values, IDs, version increments, refresh persistence, and stale-version rejection. Test validation, search/filter/stats, delete cancellation, literal HTML, empty/loading/unavailable states, mobile layout, and existing browser data preservation. Delete only test-owned records. Old browser-storage tests are historical and are not evidence of database integration.
 
 Check backend assets and HEAD responses, health, denied methods, secret/source/traversal denial, headers, valid environment configuration, ignore rules, and source file sizes before Deploy.
 
-## Local Verification (2026-11-01)
+## MariaDB Integration Verification (2026-11-01)
+
+These checks used the current local application at http://127.0.0.1:54329 and the actual confirmed p01 MariaDB database, not a mock driver.
+
+- Verified SELECT DATABASE() equals db_std13_p01 before SQL. The database initially had no tables; executed the exact local migrations.sql once through the authorized owner connection. SHOW CREATE TABLE confirmed the schema, index, and constraints. No startup migration or seed was added.
+- Browser Create returned a unique ID and version 1; direct database reads confirmed Thai text, date, pages, progress, and notes. Reload preserved the saved record.
+- Browser Update to done returned version 2 and current=pages; reload preserved the update. A concurrent update reached version 3; submitting the older edit returned 409 without overwriting it and preserved form input.
+- Invalid progress above page count returned 400; stale deletion returned 409 without changing the row. Delete cancellation preserved the record. Search, completed counts, and page totals matched saved values.
+- Literal HTML in notes remained text with no injected image. Layout had no horizontal overflow at widths 320, 375, 768, and 1280 pixels.
+- An intercepted GET returning 503 verified cached-display and disabled-write behavior; removing interception and refreshing recovered. This was a simulated API failure, not an actual database-outage test.
+- Browser Delete removed only the uniquely tagged test record. Reload and API returned an empty collection; direct SQL lookup confirmed that test ID no longer existed. Existing user data was not removed.
+- Syntax checks, editor diagnostics, git diff --check, and ignore checks passed. No full CRUD rerun is needed for subsequent documentation-only changes.
+- Fresh pre-release backend smoke checks passed: HTML GET/HEAD, CSS, JS, one cover image, MariaDB health, denied .env/server.js/migrations.sql/traversal paths, and denied PATCH. CSP, DENY framing, and nosniff headers were present. All five source files are below 1 MiB; only the two declared production dependencies are used. These are local checks, not deployed routing or scan approval.
+
+### Migration Submission Status
+
+The local migrations.sql is available separately and excluded from Git. Actual schema creation succeeded through the authorized local database connection. Platform migration history remains revision 0: preview rejected both the complete SQL and a simpler CREATE TABLE with "Unsupported or invalid MariaDB syntax". No previewId was issued, so no migration upload or platform Apply is claimed. executionAvailable was false. Platform acceptance is still blocked independently of the existing working database schema.
+
+### Release Status
+
+Managed environment revision 1 already contains the required PORT, NODE_ENV, and DB keys; it was preserved unchanged. Local database integration is verified, but a new successful platform deployment and live runtime verification are still pending. Earlier deployment jobs failed with BUILD_CAPTURE_FAILED; they are not successful releases.
+
+## Historical Local-Storage Verification (2026-11-01)
+
+These checks were run before the MariaDB conversion and do not verify the current database-backed implementation.
 
 - Passed npm syntax checks and editor diagnostics for server.js and all frontend files.
 - Theme update passed: day/night toggle, reload persistence, accessible pressed state, native control color scheme, dialogs, system preference tracking, explicit preference priority, cross-tab theme sync, and storage-write failure fallback. All four existing books remained unchanged and searchable; theme-only changes did not block reading-record edits.
@@ -109,18 +135,20 @@ Check backend assets and HEAD responses, health, denied methods, secret/source/t
 
 ## Deployment Policy
 
-Policy revision 2, hash bef855c538ab3b91967a18c7dcc5cbb73a3cb55c7c0119187c17816d769529a7.
+Policy revision 3, hash bb989ad6e209522d0b71fa4ae5ed88b4a4b46311e928b3b99ba3a97f571c48dc.
 
 - Recheck backend before every Deploy. This document is not a scan approval.
-- Semgrep, OSV, and Gitleaks block high findings. Platform scans are required on upload/git/manual/before-public, with results at most 24 hours old and a 300-second job timeout.
-- Public publication is disabled in this room. No deployment/public route is performed by this task.
+- Advanced scanners are currently off. Mandatory ownership, isolation, routing and secret safety remain enforced; re-read effective policy before deploying.
+- Public publication is disabled in this room. Authorized private project deployment is separate from public publication; do not request a public route.
 - Run non-root with platform isolation and 192 MiB memory limit. Install dependencies with lifecycle scripts disabled.
 - Never include .env, credentials, node_modules, or secrets in Git/public artifacts.
-- Database access is not implemented. If later required, reconfirm current p01 connection metadata and use DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD server-side only. Do not use legacy database values or guess host/password.
+- Database access uses only p01 metadata and server-side DB environment variables. First local SQL must verify SELECT DATABASE() equals db_std13_p01. Never use legacy credentials, root, or guessed values.
 - Server migrations are submitted separately through the database workflow with append-only history, never via server.js, npm, or Git. Authorized local SQL, if needed in a future task, must first verify SELECT DATABASE() for the confirmed project.
 - Images are stored in public/images and must be sanitized by decode/re-encode under platform limits. The backend explicitly allowlists twelve book-cover PNG routes.
 
-## Deployment Preparation (2026-11-01)
+## Historical Deployment Preparation (2026-11-01)
+
+The following describes the earlier browser-only release, not the current database integration or a successful deployment.
 
 - Owner confirmed project p01 and https://github.com/chawanuch/MyReadingDiary, branch main.
 - Git is initialized inside MyReadingDiary, separately from the unrelated parent repository.
