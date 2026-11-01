@@ -117,7 +117,11 @@ The local migrations.sql is available separately and excluded from Git. Actual s
 
 ### Release Status
 
-Managed environment revision 1 already contains the required PORT, NODE_ENV, and DB keys; it was preserved unchanged. Local database integration is verified, but a new successful platform deployment and live runtime verification are still pending. Earlier deployment jobs failed with BUILD_CAPTURE_FAILED; they are not successful releases.
+Managed environment revision 1 already contains the required PORT, NODE_ENV, and DB keys; it was preserved unchanged. Local database integration is verified. Code commit 5b169825556a583082e6985c2d1c4f3b93519d5b was pushed to the linked GitHub repository on main.
+
+Deployment job 35aaea3a-898f-477d-945f-39e38f9aa6ff used policy revision 3 and env revision 1, then failed with WORKER_FAILED. Project status identified capture / BUILD_CAPTURE_FAILED with rollback unchanged, no releaseId, and running=false. Scan status was unavailable/not_scanned with unknown gate; runtime logs were empty. No successful deployment, applied environment revision, or live URL verification is claimed. Earlier jobs failed at the same capture stage. Do not retry repeatedly or reset the database to address this platform failure.
+
+Outstanding platform work: resolve the build-capture failure and migration-preview rejection, accept migrations.sql through the separate database workflow without reapplying the existing schema, then deploy and verify the actual live application. The local integration URL is not a server deployment URL.
 
 ## Historical Local-Storage Verification (2026-11-01)
 
