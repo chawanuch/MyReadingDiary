@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f9ff">
+  <title>My Reading Diary — บันทึกระหว่างบรรทัด</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@400;500;600;700&amp;display=swap">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/index.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <a href="/" class="brand" aria-label="My Reading Diary">m<span>r</span>d<span class="brand-dot">.</span></a>
+    <span class="edition">YOUR PERSONAL READING JOURNAL<br>พื้นที่เล็ก ๆ สำหรับเรื่องราวที่คุณอ่าน</span>
+    <div class="header-actions">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="โหมดกลางคืน" aria-pressed="false" title="เปิดหรือปิดโหมดกลางคืน">
+        <svg class="theme-moon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"/></svg>
+        <svg class="theme-sun" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
+        <span class="theme-label">โหมดกลางคืน</span>
+      </button>
+      <button id="add-top" class="button primary">+ เพิ่มหนังสือ</button>
+    </div>
+  </header>
+  <main>
+    <section id="share-section" class="share-section" aria-labelledby="share-title">
+      <div class="share-copy">
+        <p class="eyebrow">TAKE YOUR NEXT CHAPTER WITH YOU</p>
+        <h2 id="share-title">สแกนแล้วเปิดอ่านบนมือถือ</h2>
+        <p>เชื่อมต่อ Wi-Fi เดียวกับคอมพิวเตอร์ แล้วสแกน QR Code เพื่อเข้า My Reading Diary</p>
+        <a id="share-link" class="share-link" hidden></a>
+        <p id="share-status" class="muted" role="status">กำลังเตรียม QR Code…</p>
+        <p class="share-note">ต้องเปิดคอมพิวเตอร์และเว็บนี้ไว้ · บันทึกแยกตามเบราว์เซอร์ ไม่ซิงก์ข้ามอุปกรณ์</p>
+      </div>
+      <figure id="share-code" class="share-code" hidden>
+        <img id="share-qr" width="200" height="200" alt="QR Code สำหรับเข้า My Reading Diary ผ่าน Wi-Fi เดียวกัน">
+        <figcaption>SCAN TO OPEN · p01</figcaption>
+      </figure>
+    </section>
+    <section class="intro"><div><p class="eyebrow">BETWEEN THE LINES / บันทึกระหว่างบรรทัด</p><h1>อ่านทีละหน้า<br><em>เติบโตทีละนิด.</em></h1><p class="intro-copy">เก็บหนังสือที่รัก ความคิดที่พบ และทุกหน้าที่พาคุณไปไกลกว่าเดิม</p></div><div class="quote"><span class="quote-mark">“</span><p>บางครั้ง การเดินทางไกลที่สุด<br>ก็เริ่มต้นจากการเปิดหนังสือ</p><span class="quote-label">A LITTLE REMINDER TO KEEP READING</span><div class="book-art" aria-hidden="true"><span>ONE MORE PAGE</span><span>STORIES &amp; IDEAS</span><span>MY READING LIFE</span></div></div></section>
+    <section class="discover" aria-labelledby="discover-title">
+      <div class="discover-heading">
+        <div><p class="eyebrow">THE READING ROOM / VOL. 01</p><h2 id="discover-title">เล่มต่อไปที่<br><em>อยากหลงรัก.</em></h2></div>
+        <div class="discover-intro"><span class="discover-seal" aria-hidden="true">GOOD<br>BOOKS<br>ONLY</span><p>แปดเรื่องราว แปดโลกใบใหม่<br>เลือกเล่มที่ใช่ แล้วเริ่มบทต่อไปของคุณ</p></div>
+      </div>
+      <div id="recommendations" class="discovery-grid"></div>
+      <p class="discovery-note">CURATED WITH LOVE · ภาพปกออกแบบเพื่อประกอบเว็บ ไม่ใช่ปกฉบับจำหน่าย · เลือกเล่มแล้วระบุจำนวนหน้าตามฉบับที่อ่านก่อนบันทึก</p>
+    </section>
+    <section class="stats" aria-label="สถิติการอ่าน"><div><span id="stat-total">0</span><p>เล่มบนชั้นหนังสือ</p></div><div><span id="stat-reading">0</span><p>เล่มที่กำลังอ่าน</p></div><div><span id="stat-done">0</span><p>เล่มที่อ่านจบแล้ว</p></div><div><span id="stat-pages">0</span><p>หน้าที่ได้เดินทาง</p></div></section>
+    <section class="library"><div class="section-heading"><div><p class="eyebrow">THE COLLECTION</p><h2>ชั้นหนังสือของฉัน<span class="small-dot">.</span></h2></div><label class="search"><span>ค้นหาหนังสือ</span><input id="search" type="search" maxlength="200" placeholder="ชื่อหนังสือ ผู้เขียน หรือบันทึก…"></label></div>
+      <div class="toolbar"><div class="tabs" role="group" aria-label="กรองสถานะ"><button class="tab active" data-filter="all" aria-pressed="true">ทั้งหมด</button><button class="tab" data-filter="reading" aria-pressed="false">กำลังอ่าน</button><button class="tab" data-filter="want" aria-pressed="false">อยากอ่าน</button><button class="tab" data-filter="done" aria-pressed="false">อ่านจบแล้ว</button></div><span id="result-count" class="muted"></span></div>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <div id="books" class="book-grid"></div>
+      <div id="empty" class="empty"><span class="empty-icon" aria-hidden="true">[ &nbsp; ]</span><h3>เรื่องราวบทใหม่ เริ่มที่เล่มแรก</h3><p id="empty-copy">เพิ่มหนังสือที่กำลังอ่าน แล้วเก็บความประทับใจไปด้วยกัน</p><button id="add-empty" class="button primary">+ เพิ่มหนังสือเล่มแรก</button></div>
+    </section>
+  </main>
+  <footer><span>MY READING DIARY <span class="footer-star">✳</span> MAKE ROOM FOR A GOOD BOOK.</span><p>บันทึกเฉพาะเบราว์เซอร์นี้ · ยังไม่ซิงก์ฐานข้อมูล · ล้างข้อมูลเบราว์เซอร์แล้วข้อมูลอาจหาย</p></footer>
+  <dialog id="book-dialog" aria-labelledby="dialog-title">
+    <form id="book-form">
+      <div class="dialog-head"><div><p class="eyebrow">A NEW CHAPTER</p><h2 id="dialog-title">เพิ่มบันทึกการอ่าน</h2></div><button type="button" id="close-dialog" class="icon-button" aria-label="ปิดหน้าต่าง">×</button></div>
+      <input id="book-id" type="hidden">
+      <label>ชื่อหนังสือ <span class="required">*</span><input id="title" required maxlength="200" autocomplete="off"></label>
+      <label>ผู้เขียน <span class="required">*</span><input id="author" required maxlength="160" autocomplete="off"></label>
+      <label>วันที่อ่าน <span class="required">*</span><input id="date" type="date" required min="0001-01-01" max="9999-12-31"></label>
+      <div class="form-row"><label>จำนวนหน้าทั้งหมด <span class="required">*</span><input id="pages" type="number" min="1" max="100000" step="1" required></label><label>จำนวนหน้าที่อ่านสะสม <span class="required">*</span><input id="current" type="number" min="0" max="100000" step="1" value="0" required></label></div>
+      <p class="muted">หนึ่งรายการต่อหนังสือหนึ่งเล่ม แก้ไขวันที่และยอดหน้าที่อ่านสะสมเมื่ออ่านต่อ</p>
+      <label>สถานะ<select id="status"><option value="want">อยากอ่าน</option><option value="reading" selected>กำลังอ่าน</option><option value="done">อ่านจบแล้ว</option></select></label>
+      <label>สรุปเนื้อหาที่อ่าน <span class="required">*</span><textarea id="notes" required rows="4" maxlength="5000" placeholder="สรุปเนื้อหา ประโยคที่ชอบ หรือสิ่งที่ได้เรียนรู้…"></textarea></label>
+      <p id="form-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions"><button type="button" id="cancel-dialog" class="button secondary">ยกเลิก</button><button type="submit" class="button primary">บันทึกการอ่าน</button></div>
+    </form>
+  </dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title"><form method="dialog"><p class="eyebrow">REMOVE FROM SHELF</p><h2 id="delete-title">ลบหนังสือเล่มนี้?</h2><p id="delete-copy"></p><p class="muted">หนังสือและบันทึกจะถูกลบถาวรจากเบราว์เซอร์นี้</p><div class="dialog-actions"><button class="button secondary" value="cancel">เก็บไว้ก่อน</button><button class="button danger" value="delete">ยืนยันลบ</button></div></form></dialog>
+</body>
+</html>
